@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no"/>
+<title>Card Squeeze Test</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: #1a5c2a;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-family: system-ui, sans-serif;
+  user-select: none;
+}
+
+.hint {
+  color: rgba(255,255,255,0.7);
+  font-size: 14px;
+  margin-bottom: 32px;
+  text-align: center;
+}
+
+.card-stack {
+  position: relative;
+  width: 120px;
+  height: 180px;
+}
+
+.card {
+  position: absolute;
+  width: 120px;
+  height: 180px;
+  border-radius: 12px;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 48px;
+  font-weight: 900;
+  top: 0;
+  left: 0;
+}
+
+/* Back card — face down, sits underneath */
+.card-back {
+  background: linear-gradient(135deg, #1a3a8a, #2a5aba);
+  border: 3px solid rgba(255,255,255,0.15);
+  z-index: 1;
+  color: #fff;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.card-back .rank {
+  font-size: 42px;
+  line-height: 1;
+}
+
+.card-back .suit {
+  font-size: 28px;
+  line-height: 1;
+}
+
+.card-back::before {
+  content: '';
+  position: absolute;
+  inset: 6px;
+  border-radius: 8px;
+  border: 2px solid rgba(255,255,255,0.2);
+  background: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 6px,
+    rgba(255,255,255,0.04) 6px,
+    rgba(255,255,255,0.04) 12px
+  );
+}
+
+/* Front card — face down back design, draggable */
+.card-front {
+  background: linear-gradient(135deg, #c0392b, #e74c3c);
+  border: 3px solid rgba(255,255,255,0.2);
+  z-index: 2;
+  cursor: grab;
+  transition: box-shadow 0.15s;
+}
+
+.card-front:active { cursor: grabbing; }
+
+.card-front::before {
+  content: '';
+  position: absolute;
+  inset: 6px;
+  border-radius: 8px;
+  border: 2px solid rgba(255,255,255,0.25);
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 6px,
+    rgba(255,255,255,0.05) 6px,
+    rgba(255,255,255,0.05) 12px
+  );
+}
+
+.card-front.revealed {
+  transition: transform 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+              box-shadow 0.35s;
+}
+
+.reset-btn {
+  margin-top: 48px;
+  padding: 12px 28px;
+  border-radius: 999px;
+  border: none;
+  background: rgba(255,255,255,0.15);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.reset-btn:hover { background: rgba(255,255,255,0.25); }
+</style>
+</head>
+<body>
+
+<p class="hint">Drag the top card upward to squeeze</p>
+
+<div class="card-stack" id="stack">
+  <div class="card card-back" id="cardBack">
+    <span class="rank">A</span>
+    <span class="suit">♠</span>
+  </div>
+  <div class="card card-front" id="cardFront"></div>
+</div>
+
+<button class="reset-btn" id="resetBtn">Reset</button>
+
+<script>
+'use strict';
+
+const front = document.getElementById('cardFront');
+const resetBtn = document.getElementById('resetBtn');
+
+const REVEAL_THRESHOLD = 140;
+let dragging = false;
+let startX = 0;
+let startY = 0;
+let currentX = 0;
+let currentY = 0;
+let revealed = false;
+
+function getClient(e) {
+  const src = e.touches ? e.touches[0] : e;
+  return { x: src.clientX, y: src.clientY };
+}
+
+function onStart(e) {
+  if (revealed) return;
+  dragging = true;
+  const { x, y } = getClient(e);
+  startX = x;
+  startY = y;
+  front.style.transition = 'none';
+  e.preventDefault();
+}
+
+function onMove(e) {
+  if (!dragging) return;
+  const { x, y } = getClient(e);
+  currentX = x - startX;
+  currentY = y - startY;
+
+  const dist = Math.sqrt(currentX * currentX + currentY * currentY);
+  const progress = Math.min(1, dist / REVEAL_THRESHOLD);
+  const angle = currentX * 0.08;
+
+  front.style.transform = `translate(${currentX}px, ${currentY}px) rotate(${angle}deg)`;
+  front.style.opacity = 1 - progress * 0.6;
+  front.style.boxShadow = `0 ${6 + progress * 20}px ${24 + progress * 30}px rgba(0,0,0,${0.5 - progress * 0.2})`;
+
+  e.preventDefault();
+}
+
+function onEnd() {
+  if (!dragging) return;
+  dragging = false;
+
+  const dist = Math.sqrt(currentX * currentX + currentY * currentY);
+  const progress = dist / REVEAL_THRESHOLD;
+
+  if (progress >= 0.55) {
+    // Fly off in the direction it was dragged
+    const scale = 260 / Math.max(dist, 1);
+    revealed = true;
+    front.classList.add('revealed');
+    front.style.transform = `translate(${currentX * scale}px, ${currentY * scale}px) rotate(${currentX * 0.15}deg)`;
+    front.style.opacity = '0';
+  } else {
+    front.style.transition = 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s, box-shadow 0.3s';
+    front.style.transform = 'translate(0, 0) rotate(0deg)';
+    front.style.opacity = '1';
+    front.style.boxShadow = '';
+  }
+  currentX = 0;
+  currentY = 0;
+}
+
+front.addEventListener('touchstart', onStart, { passive: false });
+front.addEventListener('touchmove', onMove, { passive: false });
+front.addEventListener('touchend', onEnd);
+front.addEventListener('mousedown', onStart);
+document.addEventListener('mousemove', onMove);
+document.addEventListener('mouseup', onEnd);
+
+resetBtn.addEventListener('click', () => {
+  revealed = false;
+  currentX = 0;
+  currentY = 0;
+  front.classList.remove('revealed');
+  front.style.transition = 'transform 0.3s, opacity 0.3s, box-shadow 0.3s';
+  front.style.transform = 'translate(0, 0) rotate(0deg)';
+  front.style.opacity = '1';
+  front.style.boxShadow = '';
+});
+</script>
+</body>
+</html>
