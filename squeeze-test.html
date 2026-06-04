@@ -54,6 +54,7 @@ body {
   color: #fff;
   flex-direction: column;
   gap: 4px;
+  clip-path: inset(100%);
 }
 
 .card-back .rank {
@@ -130,7 +131,7 @@ body {
 </head>
 <body>
 
-<p class="hint">Drag the top card upward to squeeze</p>
+<p class="hint">Drag the top card any direction to squeeze</p>
 
 <div class="card-stack" id="stack">
   <div class="card card-back" id="cardBack">
@@ -146,15 +147,48 @@ body {
 'use strict';
 
 const front = document.getElementById('cardFront');
+const back  = document.getElementById('cardBack');
 const resetBtn = document.getElementById('resetBtn');
 
+const W = 120, H = 180;
 const REVEAL_THRESHOLD = 140;
 let dragging = false;
-let startX = 0;
-let startY = 0;
-let currentX = 0;
-let currentY = 0;
+let startX = 0, startY = 0;
+let currentX = 0, currentY = 0;
 let revealed = false;
+
+// Returns a clip-path polygon showing only what the front card has uncovered.
+// The covered region is the intersection of the original card rect and the
+// moved front card rect. The revealed region is everything else (an L-shape).
+function getRevealClip(dx, dy) {
+  const cx1 = Math.max(0, dx);
+  const cy1 = Math.max(0, dy);
+  const cx2 = Math.min(W, W + dx);
+  const cy2 = Math.min(H, H + dy);
+
+  if (cx1 >= cx2 || cy1 >= cy2) return null; // card fully dragged off — show everything
+
+  let pts;
+  if (dx >= 0 && dy <= 0) {
+    // front card moved right and/or up → covered = top-right region
+    if (dx === 0)      pts = [[0,cy2],[W,cy2],[W,H],[0,H]];           // bottom strip
+    else if (dy === 0) pts = [[0,0],[cx1,0],[cx1,H],[0,H]];           // left strip
+    else               pts = [[0,0],[cx1,0],[cx1,cy2],[W,cy2],[W,H],[0,H]]; // L-shape
+  } else if (dx >= 0 && dy > 0) {
+    // front card moved right and down → covered = bottom-right region
+    if (dx === 0)      pts = [[0,0],[W,0],[W,cy1],[0,cy1]];           // top strip
+    else               pts = [[0,0],[W,0],[W,cy1],[cx1,cy1],[cx1,H],[0,H]]; // L-shape
+  } else if (dx < 0 && dy <= 0) {
+    // front card moved left and/or up → covered = top-left region
+    if (dy === 0)      pts = [[cx2,0],[W,0],[W,H],[cx2,H]];           // right strip
+    else               pts = [[cx2,0],[W,0],[W,H],[0,H],[0,cy2],[cx2,cy2]]; // L-shape
+  } else {
+    // front card moved left and down → covered = bottom-left region
+    pts = [[0,0],[W,0],[W,H],[cx2,H],[cx2,cy1],[0,cy1]]; // L-shape
+  }
+
+  return 'polygon(' + pts.map(([x,y]) => `${x}px ${y}px`).join(', ') + ')';
+}
 
 function getClient(e) {
   const src = e.touches ? e.touches[0] : e;
@@ -165,9 +199,9 @@ function onStart(e) {
   if (revealed) return;
   dragging = true;
   const { x, y } = getClient(e);
-  startX = x;
-  startY = y;
+  startX = x; startY = y;
   front.style.transition = 'none';
+  back.style.transition = 'none';
   e.preventDefault();
 }
 
@@ -185,6 +219,9 @@ function onMove(e) {
   front.style.opacity = 1 - progress * 0.6;
   front.style.boxShadow = `0 ${6 + progress * 20}px ${24 + progress * 30}px rgba(0,0,0,${0.5 - progress * 0.2})`;
 
+  const clip = getRevealClip(currentX, currentY);
+  back.style.clipPath = clip === null ? 'none' : clip;
+
   e.preventDefault();
 }
 
@@ -196,17 +233,20 @@ function onEnd() {
   const progress = dist / REVEAL_THRESHOLD;
 
   if (progress >= 0.55) {
-    // Fly off in the direction it was dragged
-    const scale = 260 / Math.max(dist, 1);
     revealed = true;
     front.classList.add('revealed');
+    const scale = 260 / Math.max(dist, 1);
     front.style.transform = `translate(${currentX * scale}px, ${currentY * scale}px) rotate(${currentX * 0.15}deg)`;
     front.style.opacity = '0';
+    back.style.transition = 'clip-path 0.3s ease';
+    back.style.clipPath = 'none';
   } else {
     front.style.transition = 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s, box-shadow 0.3s';
     front.style.transform = 'translate(0, 0) rotate(0deg)';
     front.style.opacity = '1';
     front.style.boxShadow = '';
+    back.style.transition = 'clip-path 0.3s ease';
+    back.style.clipPath = 'inset(100%)';
   }
   currentX = 0;
   currentY = 0;
@@ -221,13 +261,14 @@ document.addEventListener('mouseup', onEnd);
 
 resetBtn.addEventListener('click', () => {
   revealed = false;
-  currentX = 0;
-  currentY = 0;
+  currentX = 0; currentY = 0;
   front.classList.remove('revealed');
   front.style.transition = 'transform 0.3s, opacity 0.3s, box-shadow 0.3s';
   front.style.transform = 'translate(0, 0) rotate(0deg)';
   front.style.opacity = '1';
   front.style.boxShadow = '';
+  back.style.transition = 'clip-path 0.3s ease';
+  back.style.clipPath = 'inset(100%)';
 });
 </script>
 </body>
