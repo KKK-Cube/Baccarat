@@ -46,67 +46,55 @@ body {
   left: 0;
 }
 
-/* Back card — face down, sits underneath */
+/* Face card — white, sits underneath, revealed by squeezing */
 .card-back {
-  background: linear-gradient(135deg, #1a3a8a, #2a5aba);
-  border: 3px solid rgba(255,255,255,0.15);
+  background: #fff;
+  border: 2px solid #bbb;
   z-index: 1;
-  color: #fff;
-  flex-direction: column;
-  gap: 4px;
   clip-path: inset(100%);
+  color: #111;
 }
 
-.card-back .rank {
-  font-size: 42px;
-  line-height: 1;
-}
-
-.card-back .suit {
-  font-size: 28px;
-  line-height: 1;
-}
-
-.card-back::before {
-  content: '';
+.card-back .corner {
   position: absolute;
-  inset: 6px;
-  border-radius: 8px;
-  border: 2px solid rgba(255,255,255,0.2);
-  background: repeating-linear-gradient(
-    45deg,
-    transparent,
-    transparent 6px,
-    rgba(255,255,255,0.04) 6px,
-    rgba(255,255,255,0.04) 12px
-  );
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.1;
+  font-weight: 900;
 }
+.card-back .corner-tl { top: 7px; left: 9px; }
+.card-back .corner-br { bottom: 7px; right: 9px; transform: rotate(180deg); }
+.card-back .corner .c-rank { font-size: 17px; }
+.card-back .corner .c-suit { font-size: 13px; }
+.card-back .center-suit  { font-size: 58px; line-height: 1; }
+.card-back.red-card { color: #d32f2f; }
 
-/* Front card — face down back design, draggable */
+/* Top card — white face card, draggable */
 .card-front {
-  background: linear-gradient(135deg, #c0392b, #e74c3c);
-  border: 3px solid rgba(255,255,255,0.2);
+  background: #fff;
+  border: 2px solid #bbb;
   z-index: 2;
   cursor: grab;
   transition: box-shadow 0.15s;
+  color: #d32f2f;
 }
 
 .card-front:active { cursor: grabbing; }
 
-.card-front::before {
-  content: '';
+.card-front .corner {
   position: absolute;
-  inset: 6px;
-  border-radius: 8px;
-  border: 2px solid rgba(255,255,255,0.25);
-  background: repeating-linear-gradient(
-    -45deg,
-    transparent,
-    transparent 6px,
-    rgba(255,255,255,0.05) 6px,
-    rgba(255,255,255,0.05) 12px
-  );
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.1;
+  font-weight: 900;
 }
+.card-front .corner-tl { top: 7px; left: 9px; }
+.card-front .corner-br { bottom: 7px; right: 9px; transform: rotate(180deg); }
+.card-front .corner .c-rank { font-size: 17px; }
+.card-front .corner .c-suit { font-size: 13px; }
+.card-front .center-suit { font-size: 58px; line-height: 1; }
 
 .card-front.revealed {
   transition: transform 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94),
@@ -135,10 +123,15 @@ body {
 
 <div class="card-stack" id="stack">
   <div class="card card-back" id="cardBack">
-    <span class="rank">A</span>
-    <span class="suit">♠</span>
+    <div class="corner corner-tl"><span class="c-rank">A</span><span class="c-suit">♠</span></div>
+    <span class="center-suit">♠</span>
+    <div class="corner corner-br"><span class="c-rank">A</span><span class="c-suit">♠</span></div>
   </div>
-  <div class="card card-front" id="cardFront"></div>
+  <div class="card card-front" id="cardFront">
+    <div class="corner corner-tl"><span class="c-rank">K</span><span class="c-suit">♥</span></div>
+    <span class="center-suit">♥</span>
+    <div class="corner corner-br"><span class="c-rank">K</span><span class="c-suit">♥</span></div>
+  </div>
 </div>
 
 <button class="reset-btn" id="resetBtn">Reset</button>
@@ -211,13 +204,7 @@ function onMove(e) {
   currentX = x - startX;
   currentY = y - startY;
 
-  const dist = Math.sqrt(currentX * currentX + currentY * currentY);
-  const progress = Math.min(1, dist / REVEAL_THRESHOLD);
-  const angle = currentX * 0.08;
-
-  front.style.transform = `translate(${currentX}px, ${currentY}px) rotate(${angle}deg)`;
-  front.style.opacity = 1 - progress * 0.6;
-  front.style.boxShadow = `0 ${6 + progress * 20}px ${24 + progress * 30}px rgba(0,0,0,${0.5 - progress * 0.2})`;
+  front.style.transform = `translate(${currentX}px, ${currentY}px)`;
 
   const clip = getRevealClip(currentX, currentY);
   back.style.clipPath = clip === null ? 'none' : clip;
@@ -228,28 +215,7 @@ function onMove(e) {
 function onEnd() {
   if (!dragging) return;
   dragging = false;
-
-  const dist = Math.sqrt(currentX * currentX + currentY * currentY);
-  const progress = dist / REVEAL_THRESHOLD;
-
-  if (progress >= 0.55) {
-    revealed = true;
-    front.classList.add('revealed');
-    const scale = 260 / Math.max(dist, 1);
-    front.style.transform = `translate(${currentX * scale}px, ${currentY * scale}px) rotate(${currentX * 0.15}deg)`;
-    front.style.opacity = '0';
-    back.style.transition = 'clip-path 0.3s ease';
-    back.style.clipPath = 'none';
-  } else {
-    front.style.transition = 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s, box-shadow 0.3s';
-    front.style.transform = 'translate(0, 0) rotate(0deg)';
-    front.style.opacity = '1';
-    front.style.boxShadow = '';
-    back.style.transition = 'clip-path 0.3s ease';
-    back.style.clipPath = 'inset(100%)';
-  }
-  currentX = 0;
-  currentY = 0;
+  // Card stays exactly where it was dropped — no snap back, no fly off
 }
 
 front.addEventListener('touchstart', onStart, { passive: false });
@@ -260,13 +226,9 @@ document.addEventListener('mousemove', onMove);
 document.addEventListener('mouseup', onEnd);
 
 resetBtn.addEventListener('click', () => {
-  revealed = false;
   currentX = 0; currentY = 0;
-  front.classList.remove('revealed');
-  front.style.transition = 'transform 0.3s, opacity 0.3s, box-shadow 0.3s';
+  front.style.transition = 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)';
   front.style.transform = 'translate(0, 0) rotate(0deg)';
-  front.style.opacity = '1';
-  front.style.boxShadow = '';
   back.style.transition = 'clip-path 0.3s ease';
   back.style.clipPath = 'inset(100%)';
 });
