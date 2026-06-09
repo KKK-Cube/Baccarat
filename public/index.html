@@ -85,6 +85,17 @@ input.code-input { letter-spacing: 6px; font-weight: 700; font-size: 22px; text-
   gap: 24px;
 }
 
+.round-badge {
+  background: rgba(0,0,0,0.3);
+  color: rgba(255,255,255,0.7);
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  padding: 4px 14px;
+  border-radius: 20px;
+}
+
 .you-label { color: rgba(255,255,255,0.7); font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; }
 
 .cards-row { display: flex; gap: 20px; }
@@ -188,10 +199,12 @@ input.code-input { letter-spacing: 6px; font-weight: 700; font-size: 22px; text-
 
 <!-- ── Game ── -->
 <div class="screen" id="gameScreen">
+  <p class="round-badge" id="roundBadge">Round 1</p>
   <p class="you-label" id="youLabel">Your cards</p>
   <div class="cards-row" id="cardsRow"></div>
   <div class="score-display" id="scoreDisplay"><span class="score-label">Score</span>—</div>
-  <button class="btn btn-white btn-small" id="newRoundBtn" style="display:none">New Round</button>
+  <button class="btn btn-white btn-small" id="newRoundBtn" style="display:none">Next Round</button>
+  <p class="status-msg" id="waitNextMsg" style="display:none">Waiting for next round...</p>
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
@@ -361,16 +374,23 @@ socket.on('lobbyUpdate', ({ players, hostName }) => {
   });
 });
 
+socket.on('joinedRoom', ({ code }) => {
+  document.getElementById('lobbyCode').textContent = code;
+  show('lobbyScreen');
+});
+
 socket.on('joinError', (msg) => {
   document.getElementById('joinErr').textContent = msg;
 });
 
-socket.on('cardsDealt', ({ cards }) => {
+socket.on('cardsDealt', ({ cards, round }) => {
   dealtCards = cards;
   reveals = 0;
+  document.getElementById('roundBadge').textContent = `Round ${round}`;
   document.getElementById('youLabel').textContent = myName + "'s cards";
   document.getElementById('scoreDisplay').innerHTML = '<span class="score-label">Score</span>—';
   document.getElementById('newRoundBtn').style.display = 'none';
+  document.getElementById('waitNextMsg').style.display = 'none';
 
   const row = document.getElementById('cardsRow');
   row.innerHTML = '';
@@ -382,6 +402,7 @@ socket.on('cardsDealt', ({ cards }) => {
         const s = bScore(cards);
         document.getElementById('scoreDisplay').innerHTML = `<span class="score-label">Score</span>${s}`;
         if (isHost) document.getElementById('newRoundBtn').style.display = '';
+        else        document.getElementById('waitNextMsg').style.display = '';
       }
     }));
   });

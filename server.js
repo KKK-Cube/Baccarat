@@ -50,7 +50,7 @@ io.on('connection', (socket) => {
 
   socket.on('createRoom', ({ name }) => {
     roomCode = makeCode();
-    rooms.set(roomCode, { players: [{ id: socket.id, name }], hostId: socket.id });
+    rooms.set(roomCode, { players: [{ id: socket.id, name }], hostId: socket.id, round: 0 });
     socket.join(roomCode);
     socket.emit('roomCreated', { code: roomCode });
     socket.emit('setHost', true);
@@ -64,6 +64,7 @@ io.on('connection', (socket) => {
     roomCode = key;
     room.players.push({ id: socket.id, name });
     socket.join(roomCode);
+    socket.emit('joinedRoom', { code: roomCode });
     socket.emit('setHost', false);
     broadcast(roomCode);
   });
@@ -72,9 +73,10 @@ io.on('connection', (socket) => {
     if (!roomCode) return;
     const room = rooms.get(roomCode);
     if (!room || room.hostId !== socket.id) return;
+    room.round++;
     const deck = shuffle(makeDeck());
     for (const player of room.players) {
-      io.to(player.id).emit('cardsDealt', { cards: [deck.pop(), deck.pop()] });
+      io.to(player.id).emit('cardsDealt', { cards: [deck.pop(), deck.pop()], round: room.round });
     }
   });
 
