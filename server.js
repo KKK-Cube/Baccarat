@@ -74,10 +74,17 @@ io.on('connection', (socket) => {
     const room = rooms.get(roomCode);
     if (!room || room.hostId !== socket.id) return;
     room.round++;
-    const deck = shuffle(makeDeck());
+    room.deck = shuffle(makeDeck());
     for (const player of room.players) {
-      io.to(player.id).emit('cardsDealt', { cards: [deck.pop(), deck.pop()], round: room.round });
+      io.to(player.id).emit('cardsDealt', { cards: [room.deck.pop(), room.deck.pop()], round: room.round });
     }
+  });
+
+  socket.on('drawCard', () => {
+    if (!roomCode) return;
+    const room = rooms.get(roomCode);
+    if (!room || !room.deck || room.deck.length === 0) return;
+    socket.emit('cardDrawn', { card: room.deck.pop() });
   });
 
   socket.on('disconnect', () => {

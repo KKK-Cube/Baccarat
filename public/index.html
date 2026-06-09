@@ -100,46 +100,26 @@ input.code-input { letter-spacing: 6px; font-weight: 700; font-size: 22px; text-
 
 .cards-row { display: flex; gap: 20px; }
 
-/* ── Squeeze card ── */
-.squeeze-stack {
+/* ── Card stack ── */
+.card-stack {
   position: relative;
   width: 110px;
   height: 165px;
+  flex-shrink: 0;
 }
 
-.squeeze-face {
+.play-card {
   position: absolute;
   inset: 0;
   border-radius: 12px;
   background: #fff;
   border: 1.5px solid #ccc;
   box-shadow: 0 6px 24px rgba(0,0,0,0.5);
-  clip-path: inset(100%);
-  z-index: 1;
   color: #111;
 }
-.squeeze-face.red { color: #c62828; }
-
-.squeeze-cover {
-  position: absolute;
-  inset: 0;
-  border-radius: 12px;
-  background: linear-gradient(145deg, #1565c0, #0d47a1);
-  border: 2px solid rgba(255,255,255,0.15);
-  box-shadow: 0 6px 24px rgba(0,0,0,0.5);
-  z-index: 2;
-  cursor: grab;
-  touch-action: none;
-}
-.squeeze-cover::before {
-  content: '';
-  position: absolute;
-  inset: 8px;
-  border: 1.5px solid rgba(255,255,255,0.2);
-  border-radius: 7px;
-}
-.squeeze-cover:active { cursor: grabbing; }
-.squeeze-cover.done   { cursor: default; pointer-events: none; }
+.play-card.red { color: #c62828; }
+.play-card.draggable { cursor: grab; touch-action: none; z-index: 2; }
+.play-card.draggable:active { cursor: grabbing; }
 
 .corner {
   position: absolute;
@@ -203,6 +183,7 @@ input.code-input { letter-spacing: 6px; font-weight: 700; font-size: 22px; text-
   <p class="you-label" id="youLabel">Your cards</p>
   <div class="cards-row" id="cardsRow"></div>
   <div class="score-display" id="scoreDisplay"><span class="score-label">Score</span>—</div>
+  <button class="btn btn-white btn-small" id="drawBtn" style="display:none">Draw</button>
   <button class="btn btn-white btn-small" id="newRoundBtn" style="display:none">Next Round</button>
   <p class="status-msg" id="waitNextMsg" style="display:none">Waiting for next round...</p>
 </div>
@@ -218,9 +199,8 @@ const CW = 110, CH = 165;
 
 const socket = io();
 
-let myName  = '';
-let isHost  = false;
-let reveals = 0;
+let myName     = '';
+let isHost     = false;
 let dealtCards = [];
 
 // ── Screens ──
@@ -266,20 +246,21 @@ function getRevealClip(dx, dy) {
   return 'polygon(' + pts.map(([x,y]) => `${x}px ${y}px`).join(', ') + ')';
 }
 
-// ── Squeeze card ──
-function makeSqueezeCard({ rank, suit }, onRevealed) {
-  const stack = document.createElement('div');
-  stack.className = 'squeeze-stack';
+// ── Card stack (two real cards, peel the top to reveal bottom) ──
+function makeCardStack(card1, card2, onRevealed) {
+  const wrap = document.createElement('div');
+  wrap.className = 'card-stack';
 
-  const face = document.createElement('div');
-  face.className = 'squeeze-face' + (RED.has(suit) ? ' red' : '');
-  face.innerHTML = cardInner(rank, suit);
+  const bottom = document.createElement('div');
+  bottom.className = 'play-card' + (RED.has(card1.suit) ? ' red' : '');
+  bottom.innerHTML = cardInner(card1.rank, card1.suit);
 
-  const cover = document.createElement('div');
-  cover.className = 'squeeze-cover';
+  const top = document.createElement('div');
+  top.className = 'play-card draggable' + (RED.has(card2.suit) ? ' red' : '');
+  top.innerHTML = cardInner(card2.rank, card2.suit);
 
-  stack.appendChild(face);
-  stack.appendChild(cover);
+  wrap.appendChild(bottom);
+  wrap.appendChild(top);
 
   let revealed = false, dragging = false, hasMoved = false;
   let startX = 0, startY = 0;
@@ -287,7 +268,8 @@ function makeSqueezeCard({ rank, suit }, onRevealed) {
   function complete() {
     if (revealed) return;
     revealed = true;
-    cover.classList.add('done');
+    top.classList.remove('draggable');
+    top.style.cursor = 'default';
     document.removeEventListener('mousemove', onMouseMove);
     document.removeEventListener('mouseup',   onMouseUp);
     if (onRevealed) onRevealed();
@@ -296,57 +278,65 @@ function makeSqueezeCard({ rank, suit }, onRevealed) {
   function move(cx, cy) {
     hasMoved = true;
     const dx = cx - startX, dy = cy - startY;
-    cover.style.transform = `translate(${dx}px, ${dy}px)`;
-    const clip = getRevealClip(dx, dy);
-    face.style.clipPath = clip === null ? 'none' : clip;
-    if (clip === null) complete();
+    top.style.transform = `translate(${dx}px, ${dy}px)`;
+    if (getRevealClip(dx, dy) === null) complete();
   }
 
   function autoReveal() {
     if (revealed) return;
-    cover.style.transition = 'transform 0.4s cubic-bezier(0.25,0.46,0.45,0.94)';
-    cover.style.transform  = `translate(${CW + 30}px, 0)`;
-    face.style.clipPath    = 'none';
+    top.style.transition = 'transform 0.4s cubic-bezier(0.25,0.46,0.45,0.94)';
+    top.style.transform  = `translate(${CW + 30}px, 0)`;
     setTimeout(complete, 420);
   }
 
   function onMouseMove(e) { if (dragging) move(e.clientX, e.clientY); }
-  function onMouseUp()    {
+  function onMouseUp() {
     if (!dragging) return;
     dragging = false;
     if (!hasMoved && !revealed) autoReveal();
   }
 
-  cover.addEventListener('mousedown', (e) => {
+  top.addEventListener('mousedown', (e) => {
     if (revealed) return;
     dragging = true; hasMoved = false;
     startX = e.clientX; startY = e.clientY;
-    cover.style.transition = 'none';
+    top.style.transition = 'none';
   });
   document.addEventListener('mousemove', onMouseMove);
   document.addEventListener('mouseup',   onMouseUp);
 
-  cover.addEventListener('touchstart', (e) => {
+  top.addEventListener('touchstart', (e) => {
     if (revealed) return;
     dragging = true; hasMoved = false;
     startX = e.touches[0].clientX; startY = e.touches[0].clientY;
-    cover.style.transition = 'none';
+    top.style.transition = 'none';
     e.preventDefault();
   }, { passive: false });
 
-  cover.addEventListener('touchmove', (e) => {
+  top.addEventListener('touchmove', (e) => {
     if (!dragging) return;
     move(e.touches[0].clientX, e.touches[0].clientY);
     e.preventDefault();
   }, { passive: false });
 
-  cover.addEventListener('touchend', () => {
+  top.addEventListener('touchend', () => {
     if (!dragging) return;
     dragging = false;
     if (!hasMoved && !revealed) autoReveal();
   });
 
-  return stack;
+  return wrap;
+}
+
+// ── Standalone face-up card (drawn card) ──
+function makeFaceUpCard({ rank, suit }) {
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'position:relative;width:110px;height:165px;flex-shrink:0';
+  const card = document.createElement('div');
+  card.className = 'play-card' + (RED.has(suit) ? ' red' : '');
+  card.innerHTML = cardInner(rank, suit);
+  wrap.appendChild(card);
+  return wrap;
 }
 
 // ── Socket events ──
@@ -385,29 +375,33 @@ socket.on('joinError', (msg) => {
 
 socket.on('cardsDealt', ({ cards, round }) => {
   dealtCards = cards;
-  reveals = 0;
   document.getElementById('roundBadge').textContent = `Round ${round}`;
   document.getElementById('youLabel').textContent = myName + "'s cards";
   document.getElementById('scoreDisplay').innerHTML = '<span class="score-label">Score</span>—';
+  document.getElementById('drawBtn').style.display = 'none';
   document.getElementById('newRoundBtn').style.display = 'none';
   document.getElementById('waitNextMsg').style.display = 'none';
 
   const row = document.getElementById('cardsRow');
   row.innerHTML = '';
 
-  cards.forEach(card => {
-    row.appendChild(makeSqueezeCard(card, () => {
-      reveals++;
-      if (reveals === 2) {
-        const s = bScore(cards);
-        document.getElementById('scoreDisplay').innerHTML = `<span class="score-label">Score</span>${s}`;
-        if (isHost) document.getElementById('newRoundBtn').style.display = '';
-        else        document.getElementById('waitNextMsg').style.display = '';
-      }
-    }));
-  });
+  row.appendChild(makeCardStack(cards[0], cards[1], () => {
+    const s = bScore(dealtCards);
+    document.getElementById('scoreDisplay').innerHTML = `<span class="score-label">Score</span>${s}`;
+    if (s <= 7) document.getElementById('drawBtn').style.display = '';
+    if (isHost) document.getElementById('newRoundBtn').style.display = '';
+    else        document.getElementById('waitNextMsg').style.display = '';
+  }));
 
   show('gameScreen');
+});
+
+socket.on('cardDrawn', ({ card }) => {
+  dealtCards.push(card);
+  document.getElementById('cardsRow').appendChild(makeFaceUpCard(card));
+  const s = bScore(dealtCards);
+  document.getElementById('scoreDisplay').innerHTML = `<span class="score-label">Score</span>${s}`;
+  document.getElementById('drawBtn').style.display = 'none';
 });
 
 // ── Welcome screen ──
@@ -447,6 +441,11 @@ document.getElementById('codeBox').addEventListener('click', () => {
 });
 
 // ── Game ──
+document.getElementById('drawBtn').addEventListener('click', () => {
+  document.getElementById('drawBtn').style.display = 'none';
+  socket.emit('drawCard');
+});
+
 document.getElementById('newRoundBtn').addEventListener('click', () => {
   socket.emit('deal');
 });
