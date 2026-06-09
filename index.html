@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no"/>
+<title>FamilyBaccarat</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: #1a5c2a;
+  min-height: 100vh;
+  font-family: system-ui, sans-serif;
+  user-select: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 32px;
+  padding: 24px;
+}
+
+/* ── Cards row ── */
+.cards-row {
+  display: flex;
+  gap: 48px;
+  align-items: flex-start;
+}
+
+.card-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.slot-label {
+  color: rgba(255,255,255,0.6);
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+}
+
+/* ── Squeeze card ── */
+.squeeze-stack {
+  position: relative;
+  width: 100px;
+  height: 150px;
+}
+
+.squeeze-face {
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  background: #fff;
+  border: 1.5px solid #ccc;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+  clip-path: inset(100%);
+  z-index: 1;
+  color: #111;
+}
+.squeeze-face.red { color: #c62828; }
+
+.squeeze-cover {
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  background: linear-gradient(145deg, #1565c0, #0d47a1);
+  border: 2px solid rgba(255,255,255,0.15);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+  z-index: 2;
+  cursor: grab;
+  touch-action: none;
+}
+.squeeze-cover::before {
+  content: '';
+  position: absolute;
+  inset: 7px;
+  border: 1.5px solid rgba(255,255,255,0.2);
+  border-radius: 7px;
+}
+.squeeze-cover:active { cursor: grabbing; }
+.squeeze-cover.done   { cursor: default; pointer-events: none; }
+
+/* ── Card face contents ── */
+.corner {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.05;
+  font-weight: 900;
+}
+.corner-tl { top: 6px; left: 9px; }
+.corner-br { bottom: 6px; right: 9px; transform: rotate(180deg); }
+.c-rank { font-size: 18px; }
+.c-suit { font-size: 13px; }
+.center-suit {
+  font-size: 50px;
+  line-height: 1;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+/* ── Result ── */
+#result {
+  color: #fff;
+  font-size: 22px;
+  font-weight: 800;
+  text-align: center;
+  min-height: 32px;
+}
+
+/* ── Button ── */
+#dealBtn {
+  padding: 14px 40px;
+  border-radius: 12px;
+  border: none;
+  background: #fff;
+  color: #1a5c2a;
+  font-size: 17px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  transition: opacity 0.15s, transform 0.1s;
+}
+#dealBtn:active   { transform: scale(0.95); }
+#dealBtn:disabled { opacity: 0.4; pointer-events: none; }
+</style>
+</head>
+<body>
+
+<div class="cards-row">
+  <div class="card-slot">
+    <p class="slot-label">Player</p>
+    <div id="playerSlot"></div>
+  </div>
+  <div class="card-slot">
+    <p class="slot-label">Banker</p>
+    <div id="bankerSlot"></div>
+  </div>
+</div>
+
+<div id="result"></div>
+<button id="dealBtn">Deal</button>
+
+<script>
+'use strict';
+
+const RANKS = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+const SUITS = ['♠','♥','♦','♣'];
+const RED   = new Set(['♥','♦']);
+const CW = 100, CH = 150;
+
+let deck = [];
+let playerCard = null, bankerCard = null;
+let revealsLeft = 2;
+
+function makeDeck() {
+  const d = [];
+  for (const s of SUITS) for (const r of RANKS) d.push({ rank: r, suit: s });
+  return d;
+}
+function shuffle(d) {
+  for (let i = d.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [d[i], d[j]] = [d[j], d[i]];
+  }
+  return d;
+}
+function deal() { return deck.pop(); }
+
+function bValue({ rank }) {
+  if (rank === 'A') return 1;
+  if (['10','J','Q','K'].includes(rank)) return 0;
+  return +rank;
+}
+
+function cardInner(rank, suit) {
+  return `<div class="corner corner-tl"><span class="c-rank">${rank}</span><span class="c-suit">${suit}</span></div>
+          <span class="center-suit">${suit}</span>
+          <div class="corner corner-br"><span class="c-rank">${rank}</span><span class="c-suit">${suit}</span></div>`;
+}
+
+// ── Squeeze clip-path ──
+function getRevealClip(dx, dy) {
+  const cx1 = Math.max(0, dx),      cy1 = Math.max(0, dy);
+  const cx2 = Math.min(CW, CW + dx), cy2 = Math.min(CH, CH + dy);
+  if (cx1 >= cx2 || cy1 >= cy2) return null;
+
+  let pts;
+  if (dx >= 0 && dy <= 0) {
+    if (dx === 0)      pts = [[0,cy2],[CW,cy2],[CW,CH],[0,CH]];
+    else if (dy === 0) pts = [[0,0],[cx1,0],[cx1,CH],[0,CH]];
+    else               pts = [[0,0],[cx1,0],[cx1,cy2],[CW,cy2],[CW,CH],[0,CH]];
+  } else if (dx >= 0 && dy > 0) {
+    if (dx === 0)      pts = [[0,0],[CW,0],[CW,cy1],[0,cy1]];
+    else               pts = [[0,0],[CW,0],[CW,cy1],[cx1,cy1],[cx1,CH],[0,CH]];
+  } else if (dx < 0 && dy <= 0) {
+    if (dy === 0)      pts = [[cx2,0],[CW,0],[CW,CH],[cx2,CH]];
+    else               pts = [[cx2,0],[CW,0],[CW,CH],[0,CH],[0,cy2],[cx2,cy2]];
+  } else {
+    pts = [[0,0],[CW,0],[CW,CH],[cx2,CH],[cx2,cy1],[0,cy1]];
+  }
+  return 'polygon(' + pts.map(([x,y]) => `${x}px ${y}px`).join(', ') + ')';
+}
+
+// ── Squeeze card (self-contained) ──
+function makeSqueezeCard({ rank, suit }, onRevealed) {
+  const stack = document.createElement('div');
+  stack.className = 'squeeze-stack';
+
+  const face = document.createElement('div');
+  face.className = 'squeeze-face' + (RED.has(suit) ? ' red' : '');
+  face.innerHTML = cardInner(rank, suit);
+
+  const cover = document.createElement('div');
+  cover.className = 'squeeze-cover';
+
+  stack.appendChild(face);
+  stack.appendChild(cover);
+
+  let revealed = false, dragging = false, hasMoved = false;
+  let startX = 0, startY = 0;
+
+  function complete() {
+    if (revealed) return;
+    revealed = true;
+    cover.classList.add('done');
+    document.removeEventListener('mousemove', onMouseMove);
+    document.removeEventListener('mouseup',   onMouseUp);
+    if (onRevealed) onRevealed();
+  }
+
+  function move(cx, cy) {
+    hasMoved = true;
+    const dx = cx - startX, dy = cy - startY;
+    cover.style.transform = `translate(${dx}px, ${dy}px)`;
+    const clip = getRevealClip(dx, dy);
+    face.style.clipPath = clip === null ? 'none' : clip;
+    if (clip === null) complete();
+  }
+
+  function autoReveal() {
+    if (revealed) return;
+    cover.style.transition = 'transform 0.4s cubic-bezier(0.25,0.46,0.45,0.94)';
+    cover.style.transform  = `translate(${CW + 30}px, 0)`;
+    face.style.clipPath    = 'none';
+    setTimeout(complete, 420);
+  }
+
+  function onMouseMove(e) { if (dragging) move(e.clientX, e.clientY); }
+  function onMouseUp()    {
+    if (!dragging) return;
+    dragging = false;
+    if (!hasMoved && !revealed) autoReveal();
+  }
+
+  cover.addEventListener('mousedown', (e) => {
+    if (revealed) return;
+    dragging = true; hasMoved = false;
+    startX = e.clientX; startY = e.clientY;
+    cover.style.transition = 'none';
+  });
+  document.addEventListener('mousemove', onMouseMove);
+  document.addEventListener('mouseup',   onMouseUp);
+
+  cover.addEventListener('touchstart', (e) => {
+    if (revealed) return;
+    dragging = true; hasMoved = false;
+    startX = e.touches[0].clientX; startY = e.touches[0].clientY;
+    cover.style.transition = 'none';
+    e.preventDefault();
+  }, { passive: false });
+
+  cover.addEventListener('touchmove', (e) => {
+    if (!dragging) return;
+    move(e.touches[0].clientX, e.touches[0].clientY);
+    e.preventDefault();
+  }, { passive: false });
+
+  cover.addEventListener('touchend', () => {
+    if (!dragging) return;
+    dragging = false;
+    if (!hasMoved && !revealed) autoReveal();
+  });
+
+  return stack;
+}
+
+// ── Game ──
+function onCardRevealed() {
+  revealsLeft--;
+  if (revealsLeft === 0) showResult();
+}
+
+function showResult() {
+  const pv = bValue(playerCard);
+  const bv = bValue(bankerCard);
+  let text;
+  if      (pv > bv) text = 'Player wins!';
+  else if (bv > pv) text = 'Banker wins!';
+  else              text = "Tie!";
+  document.getElementById('result').textContent = text;
+  document.getElementById('dealBtn').textContent = 'Deal Again';
+  document.getElementById('dealBtn').disabled = false;
+}
+
+function dealRound() {
+  document.getElementById('dealBtn').disabled = true;
+  document.getElementById('result').textContent = '';
+
+  deck = shuffle(makeDeck());
+  playerCard = deal();
+  bankerCard  = deal();
+  revealsLeft = 2;
+
+  document.getElementById('playerSlot').innerHTML = '';
+  document.getElementById('bankerSlot').innerHTML = '';
+
+  document.getElementById('playerSlot').appendChild(makeSqueezeCard(playerCard, onCardRevealed));
+  document.getElementById('bankerSlot').appendChild(makeSqueezeCard(bankerCard,  onCardRevealed));
+}
+
+document.getElementById('dealBtn').addEventListener('click', dealRound);
+
+// Deal on load
+dealRound();
+</script>
+</body>
+</html>

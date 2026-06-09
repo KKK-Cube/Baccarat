@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no"/>
+<title>FamilyBaccarat</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: #1a5c2a;
+  min-height: 100vh;
+  font-family: system-ui, sans-serif;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.screen { display: none; flex-direction: column; align-items: center; gap: 16px; width: 100%; max-width: 360px; }
+.screen.active { display: flex; }
+
+h1 { color: #fff; font-size: 26px; letter-spacing: -0.5px; }
+
+/* ── Inputs & buttons ── */
+input {
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: 2px solid rgba(255,255,255,0.25);
+  background: rgba(255,255,255,0.08);
+  color: #fff;
+  font-size: 18px;
+  text-align: center;
+  outline: none;
+  font-family: inherit;
+}
+input::placeholder { color: rgba(255,255,255,0.35); }
+input:focus { border-color: rgba(255,255,255,0.55); }
+input.code-input { letter-spacing: 6px; font-weight: 700; font-size: 22px; text-transform: uppercase; }
+
+.btn {
+  width: 100%;
+  padding: 14px;
+  border-radius: 12px;
+  border: none;
+  font-size: 17px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  transition: opacity 0.15s, transform 0.1s;
+}
+.btn:active { transform: scale(0.96); }
+.btn:disabled { opacity: 0.35; pointer-events: none; }
+.btn-white  { background: #fff; color: #1a5c2a; }
+.btn-ghost  { background: rgba(255,255,255,0.1); color: #fff; border: 2px solid rgba(255,255,255,0.2); }
+.btn-small  { padding: 10px 20px; font-size: 15px; width: auto; }
+
+.divider { width: 100%; height: 1px; background: rgba(255,255,255,0.1); }
+
+.err { color: #ff8a80; font-size: 14px; min-height: 18px; }
+
+/* ── Lobby ── */
+.room-code-box {
+  background: rgba(0,0,0,0.3);
+  border-radius: 16px;
+  padding: 20px 28px;
+  text-align: center;
+  width: 100%;
+  cursor: pointer;
+}
+.room-code-box .label { color: rgba(255,255,255,0.55); font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 8px; }
+.room-code-box .code  { color: #fff; font-size: 40px; font-weight: 900; letter-spacing: 10px; }
+.room-code-box .hint  { color: rgba(255,255,255,0.4); font-size: 12px; margin-top: 6px; }
+
+.player-list { width: 100%; display: flex; flex-direction: column; gap: 8px; }
+.player-row  { background: rgba(255,255,255,0.08); border-radius: 10px; padding: 10px 14px; color: #fff; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+.player-row .crown { font-size: 14px; }
+
+.status-msg { color: rgba(255,255,255,0.5); font-size: 14px; text-align: center; }
+
+/* ── Game screen ── */
+#gameScreen {
+  gap: 24px;
+}
+
+.you-label { color: rgba(255,255,255,0.7); font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; }
+
+.cards-row { display: flex; gap: 20px; }
+
+/* ── Squeeze card ── */
+.squeeze-stack {
+  position: relative;
+  width: 110px;
+  height: 165px;
+}
+
+.squeeze-face {
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  background: #fff;
+  border: 1.5px solid #ccc;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.5);
+  clip-path: inset(100%);
+  z-index: 1;
+  color: #111;
+}
+.squeeze-face.red { color: #c62828; }
+
+.squeeze-cover {
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  background: linear-gradient(145deg, #1565c0, #0d47a1);
+  border: 2px solid rgba(255,255,255,0.15);
+  box-shadow: 0 6px 24px rgba(0,0,0,0.5);
+  z-index: 2;
+  cursor: grab;
+  touch-action: none;
+}
+.squeeze-cover::before {
+  content: '';
+  position: absolute;
+  inset: 8px;
+  border: 1.5px solid rgba(255,255,255,0.2);
+  border-radius: 7px;
+}
+.squeeze-cover:active { cursor: grabbing; }
+.squeeze-cover.done   { cursor: default; pointer-events: none; }
+
+.corner {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.05;
+  font-weight: 900;
+}
+.corner-tl { top: 7px; left: 10px; }
+.corner-br { bottom: 7px; right: 10px; transform: rotate(180deg); }
+.c-rank { font-size: 20px; }
+.c-suit { font-size: 14px; }
+.center-suit {
+  font-size: 56px;
+  line-height: 1;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.score-display {
+  font-size: 52px;
+  font-weight: 900;
+  color: #fff;
+  min-height: 64px;
+  text-align: center;
+}
+.score-display .score-label { font-size: 13px; font-weight: 700; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 1.5px; display: block; margin-bottom: 4px; font-size: 13px; }
+</style>
+</head>
+<body>
+
+<!-- ── Welcome ── -->
+<div class="screen active" id="welcomeScreen">
+  <h1>FamilyBaccarat</h1>
+  <input id="nameInput" placeholder="Your name" maxlength="20" autocomplete="off" spellcheck="false"/>
+  <button class="btn btn-white" id="createBtn">Create Room</button>
+  <div class="divider"></div>
+  <input class="code-input" id="codeInput" placeholder="XXXX" maxlength="4" autocomplete="off"/>
+  <button class="btn btn-ghost" id="joinBtn">Join Room</button>
+  <p class="err" id="joinErr"></p>
+</div>
+
+<!-- ── Lobby ── -->
+<div class="screen" id="lobbyScreen">
+  <div class="room-code-box" id="codeBox">
+    <p class="label">Room Code</p>
+    <p class="code" id="lobbyCode">----</p>
+    <p class="hint">tap to copy</p>
+  </div>
+  <div class="player-list" id="playerList"></div>
+  <button class="btn btn-white" id="dealBtn" style="display:none">Deal Cards</button>
+  <p class="status-msg" id="waitMsg"></p>
+</div>
+
+<!-- ── Game ── -->
+<div class="screen" id="gameScreen">
+  <p class="you-label" id="youLabel">Your cards</p>
+  <div class="cards-row" id="cardsRow"></div>
+  <div class="score-display" id="scoreDisplay"><span class="score-label">Score</span>—</div>
+  <button class="btn btn-white btn-small" id="newRoundBtn" style="display:none">New Round</button>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+'use strict';
+
+const RANKS = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+const SUITS = ['♠','♥','♦','♣'];
+const RED   = new Set(['♥','♦']);
+const CW = 110, CH = 165;
+
+const socket = io();
+
+let myName  = '';
+let isHost  = false;
+let reveals = 0;
+let dealtCards = [];
+
+// ── Screens ──
+function show(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+// ── Baccarat value ──
+function bValue({ rank }) {
+  if (rank === 'A') return 1;
+  if (['10','J','Q','K'].includes(rank)) return 0;
+  return +rank;
+}
+function bScore(cards) { return cards.reduce((s, c) => s + bValue(c), 0) % 10; }
+
+// ── Card inner HTML ──
+function cardInner(rank, suit) {
+  return `<div class="corner corner-tl"><span class="c-rank">${rank}</span><span class="c-suit">${suit}</span></div>
+          <span class="center-suit">${suit}</span>
+          <div class="corner corner-br"><span class="c-rank">${rank}</span><span class="c-suit">${suit}</span></div>`;
+}
+
+// ── Clip-path for squeeze ──
+function getRevealClip(dx, dy) {
+  const cx1 = Math.max(0, dx),      cy1 = Math.max(0, dy);
+  const cx2 = Math.min(CW, CW + dx), cy2 = Math.min(CH, CH + dy);
+  if (cx1 >= cx2 || cy1 >= cy2) return null;
+  let pts;
+  if (dx >= 0 && dy <= 0) {
+    if (dx === 0)      pts = [[0,cy2],[CW,cy2],[CW,CH],[0,CH]];
+    else if (dy === 0) pts = [[0,0],[cx1,0],[cx1,CH],[0,CH]];
+    else               pts = [[0,0],[cx1,0],[cx1,cy2],[CW,cy2],[CW,CH],[0,CH]];
+  } else if (dx >= 0 && dy > 0) {
+    if (dx === 0)      pts = [[0,0],[CW,0],[CW,cy1],[0,cy1]];
+    else               pts = [[0,0],[CW,0],[CW,cy1],[cx1,cy1],[cx1,CH],[0,CH]];
+  } else if (dx < 0 && dy <= 0) {
+    if (dy === 0)      pts = [[cx2,0],[CW,0],[CW,CH],[cx2,CH]];
+    else               pts = [[cx2,0],[CW,0],[CW,CH],[0,CH],[0,cy2],[cx2,cy2]];
+  } else {
+    pts = [[0,0],[CW,0],[CW,CH],[cx2,CH],[cx2,cy1],[0,cy1]];
+  }
+  return 'polygon(' + pts.map(([x,y]) => `${x}px ${y}px`).join(', ') + ')';
+}
+
+// ── Squeeze card ──
+function makeSqueezeCard({ rank, suit }, onRevealed) {
+  const stack = document.createElement('div');
+  stack.className = 'squeeze-stack';
+
+  const face = document.createElement('div');
+  face.className = 'squeeze-face' + (RED.has(suit) ? ' red' : '');
+  face.innerHTML = cardInner(rank, suit);
+
+  const cover = document.createElement('div');
+  cover.className = 'squeeze-cover';
+
+  stack.appendChild(face);
+  stack.appendChild(cover);
+
+  let revealed = false, dragging = false, hasMoved = false;
+  let startX = 0, startY = 0;
+
+  function complete() {
+    if (revealed) return;
+    revealed = true;
+    cover.classList.add('done');
+    document.removeEventListener('mousemove', onMouseMove);
+    document.removeEventListener('mouseup',   onMouseUp);
+    if (onRevealed) onRevealed();
+  }
+
+  function move(cx, cy) {
+    hasMoved = true;
+    const dx = cx - startX, dy = cy - startY;
+    cover.style.transform = `translate(${dx}px, ${dy}px)`;
+    const clip = getRevealClip(dx, dy);
+    face.style.clipPath = clip === null ? 'none' : clip;
+    if (clip === null) complete();
+  }
+
+  function autoReveal() {
+    if (revealed) return;
+    cover.style.transition = 'transform 0.4s cubic-bezier(0.25,0.46,0.45,0.94)';
+    cover.style.transform  = `translate(${CW + 30}px, 0)`;
+    face.style.clipPath    = 'none';
+    setTimeout(complete, 420);
+  }
+
+  function onMouseMove(e) { if (dragging) move(e.clientX, e.clientY); }
+  function onMouseUp()    {
+    if (!dragging) return;
+    dragging = false;
+    if (!hasMoved && !revealed) autoReveal();
+  }
+
+  cover.addEventListener('mousedown', (e) => {
+    if (revealed) return;
+    dragging = true; hasMoved = false;
+    startX = e.clientX; startY = e.clientY;
+    cover.style.transition = 'none';
+  });
+  document.addEventListener('mousemove', onMouseMove);
+  document.addEventListener('mouseup',   onMouseUp);
+
+  cover.addEventListener('touchstart', (e) => {
+    if (revealed) return;
+    dragging = true; hasMoved = false;
+    startX = e.touches[0].clientX; startY = e.touches[0].clientY;
+    cover.style.transition = 'none';
+    e.preventDefault();
+  }, { passive: false });
+
+  cover.addEventListener('touchmove', (e) => {
+    if (!dragging) return;
+    move(e.touches[0].clientX, e.touches[0].clientY);
+    e.preventDefault();
+  }, { passive: false });
+
+  cover.addEventListener('touchend', () => {
+    if (!dragging) return;
+    dragging = false;
+    if (!hasMoved && !revealed) autoReveal();
+  });
+
+  return stack;
+}
+
+// ── Socket events ──
+socket.on('roomCreated', ({ code }) => {
+  document.getElementById('lobbyCode').textContent = code;
+  show('lobbyScreen');
+});
+
+socket.on('setHost', (val) => {
+  isHost = val;
+  document.getElementById('dealBtn').style.display    = isHost ? '' : 'none';
+  document.getElementById('waitMsg').textContent      = isHost ? '' : 'Waiting for host to deal...';
+  document.getElementById('newRoundBtn').style.display = (isHost && document.getElementById('gameScreen').classList.contains('active')) ? '' : 'none';
+});
+
+socket.on('lobbyUpdate', ({ players, hostName }) => {
+  document.getElementById('lobbyCode').textContent = document.getElementById('lobbyCode').textContent || '----';
+  const list = document.getElementById('playerList');
+  list.innerHTML = '';
+  players.forEach(name => {
+    const row = document.createElement('div');
+    row.className = 'player-row';
+    row.innerHTML = (name === hostName ? '<span class="crown">👑</span>' : '') + name;
+    list.appendChild(row);
+  });
+});
+
+socket.on('joinError', (msg) => {
+  document.getElementById('joinErr').textContent = msg;
+});
+
+socket.on('cardsDealt', ({ cards }) => {
+  dealtCards = cards;
+  reveals = 0;
+  document.getElementById('youLabel').textContent = myName + "'s cards";
+  document.getElementById('scoreDisplay').innerHTML = '<span class="score-label">Score</span>—';
+  document.getElementById('newRoundBtn').style.display = 'none';
+
+  const row = document.getElementById('cardsRow');
+  row.innerHTML = '';
+
+  cards.forEach(card => {
+    row.appendChild(makeSqueezeCard(card, () => {
+      reveals++;
+      if (reveals === 2) {
+        const s = bScore(cards);
+        document.getElementById('scoreDisplay').innerHTML = `<span class="score-label">Score</span>${s}`;
+        if (isHost) document.getElementById('newRoundBtn').style.display = '';
+      }
+    }));
+  });
+
+  show('gameScreen');
+});
+
+// ── Welcome screen ──
+document.getElementById('createBtn').addEventListener('click', () => {
+  myName = document.getElementById('nameInput').value.trim();
+  if (!myName) { document.getElementById('nameInput').focus(); return; }
+  socket.emit('createRoom', { name: myName });
+});
+
+document.getElementById('joinBtn').addEventListener('click', () => {
+  myName = document.getElementById('nameInput').value.trim();
+  const code = document.getElementById('codeInput').value.trim();
+  if (!myName) { document.getElementById('nameInput').focus(); return; }
+  if (code.length !== 4) { document.getElementById('joinErr').textContent = 'Enter a 4-letter code.'; return; }
+  document.getElementById('joinErr').textContent = '';
+  socket.emit('joinRoom', { code, name: myName });
+});
+
+document.getElementById('nameInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('createBtn').click();
+});
+document.getElementById('codeInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('joinBtn').click();
+});
+
+// ── Lobby ──
+document.getElementById('dealBtn').addEventListener('click', () => {
+  socket.emit('deal');
+});
+
+document.getElementById('codeBox').addEventListener('click', () => {
+  const code = document.getElementById('lobbyCode').textContent;
+  navigator.clipboard?.writeText(code).then(() => {
+    document.querySelector('#codeBox .hint').textContent = 'Copied!';
+    setTimeout(() => document.querySelector('#codeBox .hint').textContent = 'tap to copy', 1500);
+  });
+});
+
+// ── Game ──
+document.getElementById('newRoundBtn').addEventListener('click', () => {
+  socket.emit('deal');
+});
+</script>
+</body>
+</html>
